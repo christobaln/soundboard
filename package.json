@@ -1,6 +1,6 @@
 {
   "name": "waveform-soundboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A desktop soundboard with microphone mixing and global shortcuts",
   "main": "desktop/main.cjs",
@@ -34,7 +34,9 @@
       "dist/**/*",
       "desktop/**/*",
       "package.json",
-      "assets/icon.png"
+      "assets/icon.png",
+      "shared/**/*",
+      "assets/icon.ico"
     ],
     "win": {
       "target": "zip",
@@ -42,9 +44,12 @@
       "icon": "assets/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "include": "build/installer.nsh"
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "include": "build/installer.nsh",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Waveform"
     },
     "mac": {
       "category": "public.app-category.music",

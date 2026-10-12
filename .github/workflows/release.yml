@@ -4,6 +4,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Version tag to build and publish (for example v0.2.0)'
+        required: true
+        default: v0.2.0
+        type: string
 permissions:
   contents: write
 concurrency:
@@ -15,9 +21,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.release_tag || github.ref_name }}
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: npm
@@ -29,10 +37,29 @@ jobs:
         run: npm test
       - name: Verify desktop startup and playback
         run: npm run test:desktop
-      - name: Build Windows ZIP and installer
+      - name: Check live public sound library
+        continue-on-error: true
+        run: node scripts/check-library.mjs
+      - name: Build Windows ZIP
+        shell: pwsh
         run: |
-          npm run package:win
-          npm run package:installer
+          $ErrorActionPreference = 'Continue'
+          npm run package:win 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/waveform-zip.log"
+          if ($LASTEXITCODE -ne 0) {
+            $message = ((Get-Content "$env:RUNNER_TEMP/waveform-zip.log" | Select-Object -Last 30) -join "`n").Replace('%','%25').Replace("`n",'%0A').Replace("`r",'%0D')
+            Write-Output "::error title=Windows ZIP build failed::$message"
+            exit 1
+          }
+      - name: Build one-click Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          npm run package:installer 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/waveform-installer.log"
+          if ($LASTEXITCODE -ne 0) {
+            $message = ((Get-Content "$env:RUNNER_TEMP/waveform-installer.log" | Select-Object -Last 30) -join "`n").Replace('%','%25').Replace("`n",'%0A').Replace("`r",'%0D')
+            Write-Output "::error title=Windows installer build failed::$message"
+            exit 1
+          }
       - name: Create checksums
         shell: pwsh
         run: |
@@ -47,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_REF: ${{ inputs.release_tag || github.ref_name }}
         run: |
           if ($env:RELEASE_REF -notmatch '^v\d+\.\d+\.\d+$') { throw 'Run this workflow from a version tag such as v0.1.0' }
           $assets = @((Get-ChildItem release -File | Where-Object { $_.Extension -in '.zip', '.exe' }).FullName) + @('release/SHA256SUMS.txt')
@@ -55,6 +82,6 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:RELEASE_REF @assets --clobber --repo $env:GH_REPO
           } else {
-            gh release create $env:RELEASE_REF @assets --verify-tag --prerelease --title "Waveform $env:RELEASE_REF for Windows" --notes-file docs/release-v0.1.0.md --repo $env:GH_REPO
+            gh release create $env:RELEASE_REF @assets --verify-tag --prerelease --title "Waveform $env:RELEASE_REF for Windows" --notes-file "docs/release-$env:RELEASE_REF.md" --repo $env:GH_REPO
           }
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

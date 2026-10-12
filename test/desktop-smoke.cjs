@@ -29,10 +29,29 @@ async function main() {
     await page.locator("#clipLoop").check();
     await page.getByRole("button", { name: "Save sound" }).click();
     await expect(page.locator("#editor")).not.toBeVisible();
+    const invalidSearch = await page.evaluate(() =>
+      window.desktop.searchSounds("a").catch((error) => error.message),
+    );
+    expect(invalidSearch).toContain("Enter between 2 and 120 characters");
+    await page.evaluate(() =>
+      window.desktop.setPreferences({
+        minimizeToTray: true,
+        startMinimized: false,
+        launchAtLogin: false,
+      }),
+    );
+    expect(
+      (await page.evaluate(() => window.desktop.preferences())).minimizeToTray,
+    ).toBe(true);
     if (process.platform === "linux" && process.env.DISPLAY) {
       await app.evaluate(({ BrowserWindow }) =>
-        BrowserWindow.getAllWindows()[0].hide(),
+        BrowserWindow.getAllWindows()[0].close(),
       );
+      expect(
+        await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].isVisible(),
+        ),
+      ).toBe(false);
       execFileSync("python", [path.join(__dirname, "x11-hotkey.py"), "2"]);
       await expect(page.locator("#nowTitle")).toHaveText("Bass hit");
       execFileSync("python", [path.join(__dirname, "x11-hotkey.py"), "S"]);

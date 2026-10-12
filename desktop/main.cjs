@@ -6,13 +6,37 @@ const {
   session,
   dialog,
   shell,
+  net,
+  Tray,
+  Menu,
+  nativeImage,
 } = require("electron");
 const path = require("node:path");
 const { validAccelerator } = require("./shortcuts.cjs");
 const { registerCableSetup } = require("./cable.cjs");
-let window;
+const { readPreferences, writePreferences } = require("./preferences.cjs");
+let window,
+  tray,
+  desktopSettings,
+  quitting = false;
+if (process.platform === "win32")
+  app.setAppUserModelId("studio.waveform.soundboard");
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
+app.on("second-instance", () => {
+  if (window) {
+    window.show();
+    window.restore();
+    window.focus();
+  }
+});
+app.on("before-quit", () => {
+  quitting = true;
+});
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.whenReady().then(() => {
+  if (!primaryInstance) return;
+  desktopSettings = readPreferences(app);
   session.defaultSession.setPermissionRequestHandler(
     (webContents, permission, callback) =>
       callback(webContents === window?.webContents && permission === "media"),
@@ -25,6 +49,7 @@ app.whenReady().then(() => {
     backgroundColor: "#101211",
     icon: path.join(__dirname, "../assets/icon.png"),
     autoHideMenuBar: true,
+    show: !desktopSettings.startMinimized,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -35,6 +60,92 @@ app.whenReady().then(() => {
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
+  tray = new Tray(
+    nativeImage.createFromPath(path.join(__dirname, "../assets/icon.png")),
+  );
+  tray.setToolTip("Waveform · sounds and voice");
+  const showWindow = () => {
+    window.show();
+    window.restore();
+    window.focus();
+  };
+  tray.on("double-click", showWindow);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Open Waveform", click: showWindow },
+      {
+        label: "Stop all sounds",
+        click: () => window.webContents.send("shortcut:play", "stop"),
+      },
+      {
+        label: "Toggle microphone mute",
+        click: () => window.webContents.send("shortcut:play", "mute"),
+      },
+      { type: "separator" },
+      { label: "Quit Waveform", click: () => app.quit() },
+    ]),
+  );
+  window.on("close", (event) => {
+    if (!quitting && desktopSettings.minimizeToTray) {
+      event.preventDefault();
+      window.hide();
+    }
+  });
+  const fromWindow = (event) => {
+    if (event.sender !== window.webContents)
+      throw new Error("Unauthorized window");
+  };
+  const getPreferences = () => ({
+    ...desktopSettings,
+    canAutoStart:
+      app.isPackaged && ["win32", "darwin"].includes(process.platform),
+    launchAtLogin:
+      app.isPackaged && ["win32", "darwin"].includes(process.platform)
+        ? app.getLoginItemSettings().openAtLogin
+        : false,
+  });
+  ipcMain.handle("desktop:preferences", (event) => {
+    fromWindow(event);
+    return getPreferences();
+  });
+  ipcMain.handle("desktop:set-preferences", (event, values) => {
+    fromWindow(event);
+    if (!values || typeof values !== "object")
+      throw new Error("Invalid desktop settings");
+    desktopSettings = writePreferences(app, values);
+    if (getPreferences().canAutoStart)
+      app.setLoginItemSettings({
+        openAtLogin: values.launchAtLogin === true,
+        path: process.execPath,
+      });
+    return getPreferences();
+  });
+  ipcMain.handle("library:search", async (event, query, offset = 0) => {
+    fromWindow(event);
+    const { searchSounds } = await import("../shared/commons.mjs");
+    return searchSounds(query, offset, (url, options) =>
+      net.fetch(url, options),
+    );
+  });
+  ipcMain.handle("library:download", async (event, url) => {
+    fromWindow(event);
+    const { downloadSound } = await import("../shared/commons.mjs");
+    return downloadSound(url, (url, options) =>
+      net.fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          "User-Agent":
+            "Waveform/0.2.0 (https://github.com/christobaln/soundboard)",
+        },
+      }),
+    );
+  });
+  ipcMain.handle("library:source", async (event, url) => {
+    fromWindow(event);
+    const { sourceURL } = await import("../shared/commons.mjs");
+    await shell.openExternal(sourceURL(url));
+  });
   registerCableSetup({ ipcMain, window, dialog, shell });
   window.loadFile(path.join(__dirname, "../dist/index.html"));
   ipcMain.handle("shortcuts:set", (event, entries) => {

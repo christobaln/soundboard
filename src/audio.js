@@ -1,3 +1,4 @@
+import { presetFor } from "./presets.js";
 export class Mixer {
   constructor(onStatus, onMicLost = () => {}) {
     this.onStatus = onStatus;
@@ -10,6 +11,7 @@ export class Mixer {
   }
   async init() {
     if (this.ctx) {
+      await this.ready;
       await this.ctx.resume();
       return;
     }
@@ -34,17 +36,27 @@ export class Mixer {
     this.output.srcObject = this.destination.stream;
     this.output.autoplay = true;
     this.output.muted = true;
+    this.ready = this.ctx.audioWorklet.addModule(
+      new URL("./pitch-worklet.js", import.meta.url),
+    );
+    await this.ready;
     await this.ctx.resume();
   }
   async configure(settings) {
     await this.init();
     this.settings = settings;
-    this.sounds.gain.value = settings.soundVolume / 100;
-    this.master.gain.value = settings.master / 100;
+    this.sounds.gain.value =
+      (settings.soundVolume / 100) *
+      Math.pow(10, (settings.soundBoost || 0) / 20);
+    this.master.gain.value =
+      (settings.master / 100) * Math.pow(10, (settings.outputBoost || 0) / 20);
     this.monitor.gain.value = settings.monitor
       ? settings.monitorVolume / 100
       : 0;
-    this.voice.gain.value = this.muted ? 0 : settings.micVolume / 100;
+    this.voice.gain.value = this.muted
+      ? 0
+      : (settings.micVolume / 100) *
+        Math.pow(10, (settings.micBoost || 0) / 20);
     await this.output.setSinkId(settings.output || "");
     this.output.muted = !settings.routing;
     if (settings.routing) await this.output.play();
@@ -59,7 +71,7 @@ export class Mixer {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: input ? { exact: input } : undefined,
-          echoCancellation: false,
+          echoCancellation: this.settings.echoCancellation !== false,
           noiseSuppression: this.settings.noiseSuppression,
           autoGainControl: false,
         },
@@ -93,42 +105,95 @@ export class Mixer {
   }
   updateVoice() {
     if (!this.mic) return;
+    const preset = presetFor(this.settings);
+    if (!this.voiceNodes) {
+      const filter = this.ctx.createBiquadFilter();
+      const body = this.ctx.createBiquadFilter();
+      body.type = "peaking";
+      body.frequency.value = 250;
+      body.Q.value = 0.8;
+      const pitch = new AudioWorkletNode(this.ctx, "waveform-voice", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+      const distortion = this.ctx.createWaveShaper();
+      distortion.oversample = "4x";
+      const ring = this.ctx.createGain(),
+        ringDepth = this.ctx.createGain(),
+        oscillator = this.ctx.createOscillator();
+      oscillator.connect(ringDepth);
+      ringDepth.connect(ring.gain);
+      oscillator.start();
+      const delay = this.ctx.createDelay(1),
+        wet = this.ctx.createGain();
+      filter.connect(body);
+      body.connect(pitch);
+      pitch.connect(distortion);
+      distortion.connect(ring);
+      ring.connect(this.voice);
+      ring.connect(delay);
+      delay.connect(wet);
+      wet.connect(this.voice);
+      this.voiceNodes = {
+        filter,
+        body,
+        pitch,
+        distortion,
+        ring,
+        ringDepth,
+        oscillator,
+        delay,
+        wet,
+      };
+    }
+    const {
+      filter,
+      body,
+      pitch,
+      distortion,
+      ring,
+      ringDepth,
+      oscillator,
+      delay,
+      wet,
+    } = this.voiceNodes;
     this.mic.disconnect();
-    for (const node of this.effects || []) node.disconnect();
-    const filter = this.ctx.createBiquadFilter();
-    const distortion = this.ctx.createWaveShaper();
-    const delay = this.ctx.createDelay(1);
-    const wet = this.ctx.createGain();
-    filter.type =
-      this.settings.effect === "radio"
-        ? "bandpass"
-        : this.settings.effect === "dark"
-          ? "lowpass"
-          : "highpass";
-    filter.frequency.value =
-      this.settings.effect === "radio"
-        ? 1600
-        : this.settings.effect === "dark"
-          ? 700
-          : 80;
-    filter.Q.value = this.settings.effect === "radio" ? 1.5 : 0.7;
-    const amount = this.settings.effect === "robot" ? 35 : 0;
+    this.mic.connect(filter);
+    filter.type = preset.filter;
+    filter.frequency.setTargetAtTime(preset.cutoff, this.ctx.currentTime, 0.02);
+    filter.Q.value = preset.filter === "bandpass" ? 1.5 : 0.7;
+    body.gain.setTargetAtTime(preset.body, this.ctx.currentTime, 0.02);
+    pitch.parameters
+      .get("pitch")
+      .setValueAtTime(preset.pitch, this.ctx.currentTime);
+    pitch.parameters
+      .get("gate")
+      .setValueAtTime(
+        this.settings.gateEnabled ? (this.settings.gateThreshold ?? -50) : -100,
+        this.ctx.currentTime,
+      );
     const curve = new Float32Array(2048);
     for (let i = 0; i < curve.length; i++) {
       const x = (i * 2) / (curve.length - 1) - 1;
-      curve[i] = amount ? ((1 + amount) * x) / (1 + amount * Math.abs(x)) : x;
+      curve[i] = preset.drive
+        ? ((1 + preset.drive) * x) / (1 + preset.drive * Math.abs(x))
+        : x;
     }
     distortion.curve = curve;
-    distortion.oversample = "4x";
-    this.mic.connect(filter);
-    filter.connect(distortion);
-    distortion.connect(this.voice);
-    delay.delayTime.value = this.settings.delay / 1000;
-    wet.gain.value = this.settings.delayWet / 100;
-    distortion.connect(delay);
-    delay.connect(wet);
-    wet.connect(this.voice);
-    this.effects = [filter, distortion, delay, wet];
+    ring.gain.setTargetAtTime(1 - preset.ring, this.ctx.currentTime, 0.02);
+    ringDepth.gain.setTargetAtTime(preset.ring, this.ctx.currentTime, 0.02);
+    oscillator.frequency.value = preset.ringHz;
+    delay.delayTime.setTargetAtTime(
+      (this.settings.delay || 180) / 1000,
+      this.ctx.currentTime,
+      0.02,
+    );
+    wet.gain.setTargetAtTime(
+      (this.settings.delayWet || 0) / 100,
+      this.ctx.currentTime,
+      0.02,
+    );
   }
   async play(sound) {
     if (this.active.has(sound.id) || this.pending.has(sound.id)) {
@@ -188,7 +253,8 @@ export class Mixer {
     if (this.voice)
       this.voice.gain.value = this.muted
         ? 0
-        : (this.settings?.micVolume ?? 100) / 100;
+        : ((this.settings?.micVolume ?? 100) / 100) *
+          Math.pow(10, (this.settings?.micBoost || 0) / 20);
     return this.muted;
   }
 }
