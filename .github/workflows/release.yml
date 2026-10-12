@@ -67,7 +67,8 @@ jobs:
           if ($assets.Count -ne 2) { throw 'Expected the ZIP and installer' }
           $assets | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)"
+            $assetName = $_.Name.Replace(' ','.')
+            "$hash  $assetName"
           } | Set-Content release/SHA256SUMS.txt -Encoding ascii
       - name: Publish release assets
         shell: pwsh
