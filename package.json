@@ -1,6 +1,6 @@
 {
   "name": "waveform-soundboard",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "A desktop soundboard with microphone mixing and global shortcuts",
   "main": "desktop/main.cjs",
@@ -9,11 +9,11 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "test": "node --test test/*.test.cjs",
-    "package:win": "npm run build && electron-builder --win zip",
-    "package:mac": "npm run build && electron-builder --mac dmg",
-    "package:linux": "npm run build && electron-builder --linux AppImage",
+    "package:win": "npm run build && electron-builder --win zip --publish never",
+    "package:mac": "npm run build && electron-builder --mac dmg --publish never",
+    "package:linux": "npm run build && electron-builder --linux AppImage --publish never",
     "test:ui": "playwright test",
-    "package:installer": "npm run build && electron-builder --win nsis",
+    "package:installer": "npm run build && electron-builder --win nsis --publish never",
     "format": "prettier --write src desktop test *.json *.js *.cjs *.html README.md",
     "test:desktop": "npm run build && node test/desktop-smoke.cjs"
   },

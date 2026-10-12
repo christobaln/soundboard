@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Version tag to build and publish (for example v0.2.0)'
+        description: 'Version tag to build and publish (for example v0.2.1)'
         required: true
-        default: v0.2.0
+        default: v0.2.1
         type: string
 permissions:
   contents: write
 concurrency:
-  group: windows-release-${{ github.ref }}
+  group: windows-release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
   windows:

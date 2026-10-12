@@ -68,7 +68,7 @@ The driver is not redistributed in Waveform. Its redistribution terms could not 
 
 ## Waveform 0.2.0
 
-On Windows, run **Waveform Setup 0.2.0.exe** once, then double-click the Waveform desktop or Start-menu shortcut. Node.js is only needed for source development. Source users can also double-click **Start Waveform.cmd** after installing Node.js 24; it prepares and launches the source checkout.
+On Windows, run **Waveform Setup 0.2.1.exe** once, then double-click the Waveform desktop or Start-menu shortcut. Node.js is only needed for source development. Source users can also double-click **Start Waveform.cmd** after installing Node.js 24; it prepares and launches the source checkout.
 
 **Find new sounds / Search online** searches Wikimedia Commons using its public MediaWiki API. Preview is local-only. **Add to library** downloads and decodes a clip before saving it to IndexedDB. Imported source/author/license credits appear in the clip editor and persist across restarts. Source/license opens the original Commons file page. Supported decodable audio is limited to 50 MB and 10 minutes. Search requires `commons.wikimedia.org`; downloads require `upload.wikimedia.org`. Saved clips work offline. No API key or credential is required. Unsupported formats and network failures are shown without altering your library.
 
