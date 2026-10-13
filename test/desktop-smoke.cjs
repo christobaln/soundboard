@@ -25,14 +25,71 @@ async function main() {
         ),
       )
       .toBe(true);
+    await page
+      .locator("#files")
+      .setInputFiles(path.join(__dirname, "fixtures/chime.mp3"));
+    await expect(page.locator(".card")).toHaveCount(4);
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "Play chime", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Edit chime", exact: true }).click();
+    await page.locator("#clipLoop").check();
+    await page.getByRole("button", { name: "Save sound" }).click();
+    await page.getByRole("button", { name: "Play chime", exact: true }).click();
+    await expect(page.locator("#nowTitle")).toHaveText("chime");
+    await page
+      .getByRole("button", { name: "Stop all sounds", exact: true })
+      .first()
+      .click();
+    await expect(page.locator("#nowTitle")).toHaveText("Nothing playing");
+    // Exercise the real isolated browser, download interception and renderer import.
+    const mp3 = [
+      ...fs.readFileSync(path.join(__dirname, "fixtures/chime.mp3")),
+    ];
+    await app.evaluate(async ({ session }, bytes) => {
+      await session
+        .fromPartition("soundboard-library")
+        .protocol.handle("https", (request) => {
+          if (new URL(request.url).pathname.startsWith("/media/sounds/"))
+            return new Response(new Uint8Array(bytes), {
+              headers: {
+                "content-type": "audio/mpeg",
+                "content-disposition":
+                  'attachment; filename="Board reaction.mp3"',
+              },
+            });
+          return new Response(
+            '<a href="https://www.myinstants.com/media/sounds/reaction.mp3" download>Download MP3</a>',
+            { headers: { "content-type": "text/html" } },
+          );
+        });
+    }, mp3);
+    const childReady = app.waitForEvent("window");
+    await page.evaluate(() => window.desktop.browseSoundboards("reaction", 15));
+    const child = await childReady;
+    await child.getByRole("link", { name: "Download MP3" }).click();
+    await expect(page.locator(".card")).toHaveCount(5);
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "Play Board reaction", exact: true }),
+    ).toBeVisible();
+    await child.close();
+    console.log(
+      "PASS: real MP3 import, persistence and in-app browser download/import.",
+    );
     await page.getByRole("button", { name: "Edit Bass hit" }).click();
     await page.locator("#clipLoop").check();
     await page.getByRole("button", { name: "Save sound" }).click();
     await expect(page.locator("#editor")).not.toBeVisible();
     const invalidSearch = await page.evaluate(() =>
-      window.desktop.searchSounds("a").catch((error) => error.message),
+      window.desktop
+        .browseSoundboards("a".repeat(121), 15)
+        .catch((error) => error.message),
     );
-    expect(invalidSearch).toContain("Enter between 2 and 120 characters");
+    expect(invalidSearch).toContain(
+      "Search must be no more than 120 characters.",
+    );
     await page.evaluate(() =>
       window.desktop.setPreferences({
         minimizeToTray: true,

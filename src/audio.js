@@ -1,3 +1,4 @@
+import { decodeClip } from "./import-audio.js";
 import { presetFor } from "./presets.js";
 export class Mixer {
   constructor(onStatus, onMicLost = () => {}) {
@@ -206,7 +207,7 @@ export class Mixer {
       await this.init();
       let buffer = this.cache.get(sound.id);
       if (!buffer) {
-        buffer = await this.ctx.decodeAudioData(await sound.blob.arrayBuffer());
+        buffer = await decodeClip(sound.blob, sound.name);
         this.cache.set(sound.id, buffer);
       }
       if (this.pending.get(sound.id) !== request) return;

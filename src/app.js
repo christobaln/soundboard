@@ -1,6 +1,7 @@
 import "./style.css";
 import { storage, demoSound } from "./storage.js";
 import { Mixer } from "./audio.js";
+import { prepareClip } from "./import-audio.js";
 import { voicePresets, presetFor } from "./presets.js";
 import { setupCatalog } from "./catalog.js";
 const defaults = {
@@ -395,7 +396,7 @@ $("#cards").addEventListener("click", async (e) => {
     editId = target.dataset.edit;
     const s = sounds.find((s) => s.id === editId);
     $("#clipAttribution").textContent = s.source
-      ? `Source: Wikimedia Commons · ${s.source.license} · ${s.source.author} · ${s.source.url}`
+      ? `Source: ${s.source.provider || "Sound library"} · ${s.source.license} · ${s.source.author} · ${s.source.url}`
       : "";
     $("#soundName").value = s.name;
     $("#soundCategory").value = s.category;
@@ -462,18 +463,14 @@ $("#files").onchange = async (e) => {
       continue;
     }
     try {
-      await mixer.init();
-      const data = await mixer.ctx.decodeAudioData(await file.arrayBuffer());
-      if (data.duration > 600) {
-        toast(`${file.name}: maximum clip length is 10 minutes.`);
-        continue;
-      }
+      const prepared = await prepareClip(file, file.name);
       const s = {
         createdAt: Date.now(),
         id: crypto.randomUUID(),
         name: file.name.replace(/\.[^.]+$/, ""),
         category: "My sounds",
-        blob: file,
+        blob: prepared.blob,
+        duration: prepared.duration,
         key: "",
         volume: 100,
         speed: 100,
@@ -677,16 +674,18 @@ loadDesktopPreferences();
 async function addDownloadedSound(blob, name, source) {
   if (sounds.some((sound) => sound.source?.downloadURL === source.downloadURL))
     throw new Error("This sound is already in your library.");
-  await mixer.init();
-  const data = await mixer.ctx.decodeAudioData(await blob.arrayBuffer());
-  if (data.duration > 600)
-    throw new Error("This clip is longer than 10 minutes.");
+  const prepared = await prepareClip(
+    blob,
+    name,
+    Number(localStorage.getItem("library-clip-seconds") || 15),
+  );
   const sound = {
     id: crypto.randomUUID(),
     createdAt: Date.now(),
     name: name.replace(/\.[^.]+$/, ""),
-    category: "Online finds",
-    blob,
+    category: "Soundboard finds",
+    blob: prepared.blob,
+    duration: prepared.duration,
     source,
     key: "",
     volume: 100,

@@ -1,9 +1,12 @@
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktop", {
   platform: process.platform,
-  searchSounds: (query, offset) =>
-    ipcRenderer.invoke("library:search", query, offset),
-  downloadSound: (url) => ipcRenderer.invoke("library:download", url),
+  browseSoundboards: (query, seconds) =>
+    ipcRenderer.invoke("library:browse", query, seconds),
+  onLibraryClip: (callback) =>
+    ipcRenderer.on("library:clip", (_event, data) => callback(data)),
+  onLibraryStatus: (callback) =>
+    ipcRenderer.on("library:status", (_event, message) => callback(message)),
   openSource: (url) => ipcRenderer.invoke("library:source", url),
   preferences: () => ipcRenderer.invoke("desktop:preferences"),
   setPreferences: (values) =>

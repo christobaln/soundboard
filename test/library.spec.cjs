@@ -210,6 +210,8 @@ test("stop-all cancels decoding clips before they can start", async ({
       id: "slow",
       loop: true,
       blob: {
+        size:bytes.byteLength,
+        type:"audio/wav",
         arrayBuffer: () => {
           started();
           return new Promise((resolve) => {

@@ -749,3 +749,9 @@ button:disabled {
   animation: none !important;
   transition: none !important;
 }
+.catalog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}

@@ -6,7 +6,6 @@ const {
   session,
   dialog,
   shell,
-  net,
   Tray,
   Menu,
   nativeImage,
@@ -15,6 +14,7 @@ const path = require("node:path");
 const { validAccelerator } = require("./shortcuts.cjs");
 const { registerCableSetup } = require("./cable.cjs");
 const { readPreferences, writePreferences } = require("./preferences.cjs");
+const { registerSoundboards } = require("./soundboards.cjs");
 let window,
   tray,
   desktopSettings,
@@ -120,33 +120,14 @@ app.whenReady().then(() => {
       });
     return getPreferences();
   });
-  ipcMain.handle("library:search", async (event, query, offset = 0) => {
-    fromWindow(event);
-    const { searchSounds } = await import("../shared/commons.mjs");
-    return searchSounds(query, offset, (url, options) =>
-      net.fetch(url, options),
-    );
-  });
-  ipcMain.handle("library:download", async (event, url) => {
-    fromWindow(event);
-    const { downloadSound } = await import("../shared/commons.mjs");
-    return downloadSound(url, (url, options) =>
-      net.fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          "User-Agent":
-            "Waveform/0.2.0 (https://github.com/christobaln/soundboard)",
-        },
-      }),
-    );
-  });
   ipcMain.handle("library:source", async (event, url) => {
     fromWindow(event);
     const { sourceURL } = await import("../shared/commons.mjs");
-    await shell.openExternal(sourceURL(url));
+    const { isLibraryURL } = await import("../shared/soundboards.mjs");
+    await shell.openExternal(isLibraryURL(url) ? url : sourceURL(url));
   });
   registerCableSetup({ ipcMain, window, dialog, shell });
+  registerSoundboards({ app, BrowserWindow, session, ipcMain, window });
   window.loadFile(path.join(__dirname, "../dist/index.html"));
   ipcMain.handle("shortcuts:set", (event, entries) => {
     if (

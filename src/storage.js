@@ -7,21 +7,60 @@ const database = new Promise((resolve, reject) => {
 });
 export async function storage(operation, value) {
   const db = await database;
+  let record = value;
+  if (operation === "put") {
+    const { blob, ...metadata } = value;
+    record = { ...metadata };
+    if (blob) {
+      record.audioBytes = await blob.arrayBuffer();
+      record.audioMime = blob.type || "audio/wav";
+    }
+  }
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(
-      "sounds",
-      operation === "all" ? "readonly" : "readwrite",
-    );
-    const store = tx.objectStore("sounds");
-    const req =
-      operation === "all"
-        ? store.getAll()
-        : operation === "put"
-          ? store.put(value)
-          : store.delete(value);
-    tx.oncomplete = () => resolve(req.result);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
+    let tx, request;
+    try {
+      tx = db.transaction(
+        "sounds",
+        operation === "all" ? "readonly" : "readwrite",
+      );
+      const store = tx.objectStore("sounds");
+      request =
+        operation === "all"
+          ? store.getAll()
+          : operation === "put"
+            ? store.put(record)
+            : store.delete(value);
+    } catch (error) {
+      reject(
+        new Error(`Library storage failed (${error.name}): ${error.message}`),
+      );
+      return;
+    }
+    tx.oncomplete = () => {
+      if (operation === "all")
+        resolve(
+          request.result.map((record) => {
+            const { audioBytes, audioMime, ...sound } = record;
+            return audioBytes
+              ? {
+                  ...sound,
+                  blob: new Blob([audioBytes], {
+                    type: audioMime || "audio/wav",
+                  }),
+                }
+              : sound;
+          }),
+        );
+      else resolve(request.result);
+    };
+    const failed = () =>
+      reject(
+        new Error(
+          `Library storage failed (${tx.error?.name || request.error?.name || "transaction aborted"}): ${tx.error?.message || request.error?.message || "Could not save the audio bytes"}`,
+        ),
+      );
+    tx.onerror = failed;
+    tx.onabort = failed;
   });
 }
 export function demoSound(kind) {

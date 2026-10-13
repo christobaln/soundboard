@@ -1,6 +1,6 @@
 {
   "name": "waveform-soundboard",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "A desktop soundboard with microphone mixing and global shortcuts",
   "main": "desktop/main.cjs",
@@ -59,7 +59,20 @@
     },
     "linux": {
       "category": "AudioVideo"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "third-party-sources",
+        "to": "third-party-sources"
+      }
+    ]
   },
-  "author": "Waveform contributors"
+  "author": "Waveform contributors",
+  "dependencies": {
+    "mpg123-decoder": "^1.0.3"
+  }
 }
