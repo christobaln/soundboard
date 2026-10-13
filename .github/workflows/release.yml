@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Version tag to build and publish (for example v0.3.0)'
+        description: 'Version tag to build and publish (for example v0.3.1)'
         required: true
-        default: v0.3.0
+        default: v0.3.1
         type: string
 permissions:
   contents: write

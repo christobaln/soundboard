@@ -1,12 +1,40 @@
-const database = new Promise((resolve, reject) => {
-  const request = indexedDB.open("waveform", 1);
-  request.onupgradeneeded = () =>
-    request.result.createObjectStore("sounds", { keyPath: "id" });
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error);
-});
-export async function storage(operation, value) {
-  const db = await database;
+let database;
+function openDatabase() {
+  if (database) return database;
+  database = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () =>
+        reject(new Error("Library database open failed: request timed out.")),
+      5000,
+    );
+    const request = indexedDB.open("waveform", 1);
+    request.onupgradeneeded = () =>
+      request.result.createObjectStore("sounds", { keyPath: "id" });
+    request.onsuccess = () => {
+      clearTimeout(timeout);
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      clearTimeout(timeout);
+      reject(
+        new Error(
+          `Library database open failed (${request.error?.name}): ${request.error?.message}`,
+        ),
+      );
+    };
+    request.onblocked = () => {
+      clearTimeout(timeout);
+      reject(
+        new Error(
+          "Library database is blocked by another window. Quit Waveform completely and reopen it.",
+        ),
+      );
+    };
+  });
+  return database;
+}
+async function browserStorage(operation, value) {
+  const db = await openDatabase();
   let record = value;
   if (operation === "put") {
     const { blob, ...metadata } = value;
@@ -62,6 +90,49 @@ export async function storage(operation, value) {
     tx.onerror = failed;
     tx.onabort = failed;
   });
+}
+let warning = "";
+export const storageWarning = () => warning;
+const hydrate = (record) => {
+  const { audioBytes, audioMime, ...sound } = record;
+  return {
+    ...sound,
+    blob: new Blob([audioBytes], { type: audioMime || "audio/wav" }),
+  };
+};
+export async function storage(operation, value) {
+  if (!window.desktop?.libraryStorage) return browserStorage(operation, value);
+  const native = window.desktop.libraryStorage;
+  if (operation === "all") {
+    let result = await native("all");
+    if (!result.migrated) {
+      try {
+        const legacy = await browserStorage("all");
+        const ids = new Set(result.sounds.map((sound) => sound.id));
+        for (const sound of legacy)
+          if (!ids.has(sound.id)) await storage("put", sound);
+        await native("migrated");
+      } catch (error) {
+        warning = `Previous library could not be read: ${error.message}. Existing database files were kept. New imports use desktop file storage.`;
+      }
+      result = await native("all");
+    }
+    return result.sounds.map(hydrate);
+  }
+  if (operation === "put") {
+    const { blob, ...metadata } = value;
+    if (!blob) throw new Error("Cannot save sound: audio is missing.");
+    let audioBytes;
+    try {
+      audioBytes = await blob.arrayBuffer();
+    } catch (error) {
+      throw new Error(
+        `Cannot read sound bytes for storage (${error.name}): ${error.message}`,
+      );
+    }
+    return native("put", { ...metadata, audioBytes, audioMime: blob.type });
+  }
+  return native(operation, value);
 }
 export function demoSound(kind) {
   const rate = 22050,

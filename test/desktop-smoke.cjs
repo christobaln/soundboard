@@ -15,6 +15,10 @@ async function main() {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(page.locator(".card")).toHaveCount(3);
+    const packageVersion = require("../package.json").version;
+    await expect(page.locator("#appVersion")).toHaveText(
+      `Waveform ${packageVersion}`,
+    );
     expect(await page.evaluate(() => window.desktop.platform)).toBe(
       process.platform,
     );
@@ -29,10 +33,39 @@ async function main() {
       .locator("#files")
       .setInputFiles(path.join(__dirname, "fixtures/chime.mp3"));
     await expect(page.locator(".card")).toHaveCount(4);
+    // A failing IndexedDB must not prevent desktop imports or file persistence.
+    const userDataPath = await app.evaluate(({ app }) =>
+      app.getPath("userData"),
+    );
+    expect(userDataPath).toBe(profile);
+    fs.rmSync(path.join(userDataPath, "sound-library", ".legacy-migrated"));
+    await page.addInitScript(() => {
+      Object.defineProperty(IDBFactory.prototype, "open", {
+        value() {
+          const request = {};
+          setTimeout(() => {
+            request.error = new DOMException("Internal error", "UnknownError");
+            request.onerror?.();
+          }, 0);
+          return request;
+        },
+      });
+    });
     await page.reload();
+    await expect(page.locator("#browserWarning")).toContainText(
+      "Previous library could not be read",
+    );
     await expect(
       page.getByRole("button", { name: "Play chime", exact: true }),
     ).toBeVisible();
+    await page
+      .locator("#files")
+      .setInputFiles({
+        name: "offline-import.mp3",
+        mimeType: "audio/mpeg",
+        buffer: fs.readFileSync(path.join(__dirname, "fixtures/chime.mp3")),
+      });
+    await expect(page.locator(".card")).toHaveCount(5);
     await page.getByRole("button", { name: "Edit chime", exact: true }).click();
     await page.locator("#clipLoop").check();
     await page.getByRole("button", { name: "Save sound" }).click();
@@ -69,7 +102,7 @@ async function main() {
     await page.evaluate(() => window.desktop.browseSoundboards("reaction", 15));
     const child = await childReady;
     await child.getByRole("link", { name: "Download MP3" }).click();
-    await expect(page.locator(".card")).toHaveCount(5);
+    await expect(page.locator(".card")).toHaveCount(6);
     await page.reload();
     await expect(
       page.getByRole("button", { name: "Play Board reaction", exact: true }),
@@ -138,6 +171,92 @@ async function main() {
       window.desktop.setShortcuts([{ id: "bad", key: "S" }]),
     );
     expect(invalid).toEqual([{ id: "bad", ok: false }]);
+    const deleteId = await page
+      .locator(".card")
+      .first()
+      .locator("[data-play]")
+      .getAttribute("data-play");
+    await page.evaluate(
+      (id) => window.desktop.libraryStorage("delete", id),
+      deleteId,
+    );
+    const diskLibrary = fs
+      .readdirSync(path.join(userDataPath, "sound-library"))
+      .filter((name) => name.endsWith(".audio")).length;
+    expect(diskLibrary).toBe(5);
+    await app.close();
+    app = await _electron.launch({ executablePath: require("electron"), args });
+    const reopened = await app.firstWindow();
+    await expect(reopened.locator(".card")).toHaveCount(5);
+    await expect(
+      reopened.getByRole("button", { name: "Play chime", exact: true }),
+    ).toBeVisible();
+    console.log(
+      "PASS: MP3 imports work with IndexedDB forced to fail; disk library survives process restart and deletion.",
+    );
+    reopened.on("pageerror", (e) => errors.push(e.message));
+    await reopened.evaluate(
+      (bytes) =>
+        new Promise((resolve, reject) => {
+          const request = indexedDB.open("waveform", 1);
+          request.onsuccess = () => {
+            const database = request.result,
+              transaction = database.transaction("sounds", "readwrite");
+            transaction.objectStore("sounds").put({
+              id: "legacy-test",
+              name: "Legacy clip",
+              category: "My sounds",
+              blob: new Blob([new Uint8Array(bytes)], { type: "audio/mpeg" }),
+              key: "",
+              volume: 100,
+              speed: 100,
+              loop: false,
+              favorite: false,
+              color: "#627d4e",
+              seed: 0,
+            });
+            transaction.oncomplete = () => {
+              database.close();
+              resolve();
+            };
+            transaction.onerror = () => reject(transaction.error);
+          };
+          request.onerror = () => reject(request.error);
+        }),
+      mp3,
+    );
+    fs.rmSync(path.join(userDataPath, "sound-library", ".legacy-migrated"));
+    await reopened.reload();
+    await expect(reopened.locator(".card")).toHaveCount(6);
+    await expect(
+      reopened.getByRole("button", { name: "Play Legacy clip", exact: true }),
+    ).toBeVisible();
+    await reopened.evaluate(() =>
+      window.desktop.libraryStorage("delete", "legacy-test"),
+    );
+    await reopened.reload();
+    await expect(reopened.locator(".card")).toHaveCount(5);
+    const legacyRetained = await reopened.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const request = indexedDB.open("waveform", 1);
+          request.onsuccess = () => {
+            const database = request.result,
+              read = database
+                .transaction("sounds")
+                .objectStore("sounds")
+                .get("legacy-test");
+            read.onsuccess = () => {
+              resolve(!!read.result?.blob);
+              database.close();
+            };
+          };
+        }),
+    );
+    expect(legacyRetained).toBe(true);
+    console.log(
+      "PASS: legacy audio migrates without deleting the original database or resurrecting deleted clips.",
+    );
     expect(errors).toEqual([]);
     console.log(
       "PASS: desktop rendering, native shortcut registration, IPC validation and playback.",

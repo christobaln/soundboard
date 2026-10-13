@@ -15,6 +15,7 @@ const { validAccelerator } = require("./shortcuts.cjs");
 const { registerCableSetup } = require("./cable.cjs");
 const { readPreferences, writePreferences } = require("./preferences.cjs");
 const { registerSoundboards } = require("./soundboards.cjs");
+const { registerLibrary } = require("./library.cjs");
 let window,
   tray,
   desktopSettings,
@@ -97,6 +98,7 @@ app.whenReady().then(() => {
   };
   const getPreferences = () => ({
     ...desktopSettings,
+    version: app.getVersion(),
     canAutoStart:
       app.isPackaged && ["win32", "darwin"].includes(process.platform),
     launchAtLogin:
@@ -126,6 +128,7 @@ app.whenReady().then(() => {
     const { isLibraryURL } = await import("../shared/soundboards.mjs");
     await shell.openExternal(isLibraryURL(url) ? url : sourceURL(url));
   });
+  registerLibrary({ app, ipcMain, window });
   registerCableSetup({ ipcMain, window, dialog, shell });
   registerSoundboards({ app, BrowserWindow, session, ipcMain, window });
   window.loadFile(path.join(__dirname, "../dist/index.html"));

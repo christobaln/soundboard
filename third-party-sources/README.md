@@ -28,7 +28,7 @@ These commands regenerate the EmscriptenWasm module and MP3 distribution.
 The original full upstream checkout is also available at the pinned URL above.
 
 Waveform's full application source and locked dependencies are available at
-https://github.com/christobaln/soundboard/tree/v0.3.0 . After `npm ci`, replace
+https://github.com/christobaln/soundboard/tree/v0.3.1 . After `npm ci`, replace
 node_modules/mpg123-decoder with your rebuilt package (and common if changed).
 Run `npm run test:ui` and `npm run test:desktop`, then `npm run package:installer`
 on Windows. Vite's rebuild embeds your replacement decoder into the renderer.

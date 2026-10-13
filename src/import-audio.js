@@ -66,7 +66,14 @@ export async function decodeClip(blob, name = "", maxSeconds = 600) {
       prefix.startsWith("ID3") ||
       (bytes[0] === 255 && (bytes[1] & 224) === 224));
   if (isMp3) {
-    const decoder = new MPEGDecoderWebWorker();
+    let decoder;
+    try {
+      decoder = new MPEGDecoderWebWorker();
+    } catch (error) {
+      throw new Error(
+        `MP3 decoder could not start (${error.name}): ${error.message}`,
+      );
+    }
     const parts = [];
     let length = 0,
       sampleRate = 0,
@@ -136,9 +143,15 @@ export async function prepareClip(blob, name = "", maxSeconds = 600) {
   if (blob?.size > MAX_BYTES)
     throw new Error("Maximum audio file size is 50 MB.");
   const buffer = await decodeClip(blob, name, maxSeconds);
-  return {
-    blob: encodeWave(buffer, maxSeconds),
-    duration: Math.min(buffer.duration, maxSeconds),
-    buffer,
-  };
+  try {
+    return {
+      blob: encodeWave(buffer, maxSeconds),
+      duration: Math.min(buffer.duration, maxSeconds),
+      buffer,
+    };
+  } catch (error) {
+    throw new Error(
+      `Could not prepare the sound for saving (${error.name}): ${error.message}`,
+    );
+  }
 }

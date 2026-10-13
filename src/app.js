@@ -1,5 +1,5 @@
 import "./style.css";
-import { storage, demoSound } from "./storage.js";
+import { storage, demoSound, storageWarning } from "./storage.js";
 import { Mixer } from "./audio.js";
 import { prepareClip } from "./import-audio.js";
 import { voicePresets, presetFor } from "./presets.js";
@@ -105,7 +105,7 @@ const toggle = (id, label, checked) =>
 const knob = (id, label, value, min, max, unit) =>
   `<div class="studio-control"><div class="labelrow"><label for="${id}">${label}</label><span id="${id}Value">${value} ${unit}</span></div><input id="${id}" type="range" min="${min}" max="${max}" value="${value}" data-unit="${unit}"></div>`;
 $("#app").innerHTML = `
-<aside class="sidebar"><div class="logo"><span>≋</span> waveform<span style="font-size:9px;color:#708267;align-self:start">BETA</span></div><div><p class="eyebrow">Your space</p><nav class="nav"><button class="active" data-view="all">▦ &nbsp; Sound library <span id="totalCount">0</span></button><button data-view="favorites">♡ &nbsp; Favorites <span id="favoriteCount">0</span></button><button data-view="recent">◷ &nbsp; Recently played</button></nav></div><div><p class="eyebrow">Make it yours</p><nav class="nav"><button id="browseSounds">⌕ &nbsp; Find new sounds</button><button id="customize">◉ &nbsp; Settings</button><button id="shortcuts">⌘ &nbsp; Global shortcuts</button><button id="routingHelp">↗ &nbsp; Audio routing guide</button></nav></div><div class="note"><strong>Built for your next session.</strong>Keep playing. Your shortcuts work while Waveform runs in the background.<br><br><span id="desktopStatus"></span></div></aside>
+<aside class="sidebar"><div class="logo"><span>≋</span> waveform<span style="font-size:9px;color:#708267;align-self:start">BETA</span></div><div><p class="eyebrow">Your space</p><nav class="nav"><button class="active" data-view="all">▦ &nbsp; Sound library <span id="totalCount">0</span></button><button data-view="favorites">♡ &nbsp; Favorites <span id="favoriteCount">0</span></button><button data-view="recent">◷ &nbsp; Recently played</button></nav></div><div><p class="eyebrow">Make it yours</p><nav class="nav"><button id="browseSounds">⌕ &nbsp; Find new sounds</button><button id="customize">◉ &nbsp; Settings</button><button id="shortcuts">⌘ &nbsp; Global shortcuts</button><button id="routingHelp">↗ &nbsp; Audio routing guide</button></nav></div><div class="note"><strong>Built for your next session.</strong>Keep playing. Your shortcuts work while Waveform runs in the background.<br><br><span id="desktopStatus"></span><br><span id="appVersion"></span></div></aside>
 <main class="main"><header class="top"><input id="search" class="search" type="search" placeholder="Search your sounds…" aria-label="Search sounds"><span class="pill" id="routeBadge">● Local playback</span></header><section class="hero"><div class="cover" aria-hidden="true">${wave(4)}</div><div><span class="eyebrow" style="color:#b4ce9d">Your personal sound collection</span><h1>A little louder.<br>A lot more you.</h1><p>Every reaction, perfectly timed.<br>Your sounds. Your voice. Your rules.</p></div></section><div id="browserWarning"></div><div class="toolbar"><div style="display:flex;gap:8px"><button class="primary" id="import">＋ &nbsp; Add sounds</button><button class="secondary" id="catalogButton">Search online</button></div><button class="secondary" id="stopAll">■ &nbsp; Stop all sounds</button></div><div class="sectionhead"><h2 id="viewTitle">Your library</h2><span id="librarySummary"></span></div><section id="cards" class="grid" aria-label="Sound library"></section><input id="files" type="file" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a" multiple hidden><p class="help" style="margin-top:24px">Click a sound to play. Click it again to stop. Import your own clips, then use ⋯ to assign a shortcut, adjust volume, or loop it.</p></main>
 <aside class="right"><h2>Session mixer <span style="color:var(--accent);float:right">≋</span></h2><div class="field"><label for="input">MICROPHONE INPUT</label><select id="input"><option value="">System default microphone</option></select><label for="output">SEND MIX TO</label><select id="output"><option value="">System default output</option></select></div><button class="secondary" id="refreshDevices" style="margin-top:12px;width:100%">Refresh audio devices</button>${toggle("routing", "Send audio to selected output", settings.routing)}${toggle("mic", "Include microphone", settings.mic)}<div class="status" id="audioStatus" role="status">Ready for local playback. Enable routing after selecting your virtual cable.</div>${slider("soundVolume", "Soundboard", settings.soundVolume)}${slider("micVolume", "Microphone", settings.micVolume)}<hr><h2 style="margin-bottom:15px">Voice studio</h2><div class="effects">${[
   ["clean", "◉ Clean"],
@@ -648,6 +648,9 @@ async function loadDesktopPreferences() {
   }
   try {
     desktopPreferences = await window.desktop.preferences();
+    $("#appVersion").textContent = desktopPreferences.version
+      ? `Waveform ${desktopPreferences.version}`
+      : "";
     for (const id of ["minimizeToTray", "startMinimized", "launchAtLogin"])
       $(`#${id}`).checked = desktopPreferences[id];
     $("#launchAtLogin").disabled = !desktopPreferences.canAutoStart;
@@ -713,6 +716,10 @@ $("#compact").onchange = (e) => {
 async function start() {
   try {
     sounds = await storage("all");
+    if (storageWarning()) {
+      $("#browserWarning").textContent = storageWarning();
+      toast(storageWarning());
+    }
     if (!localStorage.getItem("waveform-initialized")) {
       for (const [i, name] of [
         "Level up",

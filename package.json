@@ -1,6 +1,6 @@
 {
   "name": "waveform-soundboard",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A desktop soundboard with microphone mixing and global shortcuts",
   "main": "desktop/main.cjs",

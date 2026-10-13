@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktop", {
   platform: process.platform,
+  libraryStorage: (operation, value) =>
+    ipcRenderer.invoke("library:storage", operation, value),
   browseSoundboards: (query, seconds) =>
     ipcRenderer.invoke("library:browse", query, seconds),
   onLibraryClip: (callback) =>

@@ -34,7 +34,7 @@ Discord bots can hear clips only if they join the voice channel and implement au
 
 ## Features
 
-- Persistent IndexedDB audio library; search, favorites and recent playback.
+- Persistent desktop file library (IndexedDB in the browser preview); search, favorites and recent playback.
 - Import audio files up to 50 MB / 10 minutes, validated with the audio decoder. Starter clips are generated locally.
 - Per-clip volume, speed, looping, category, and modified global shortcuts.
 - Global stop and mic-mute shortcuts. Shortcut registration failures are shown instead of silently ignored.
@@ -66,13 +66,13 @@ The soundboard installer offers to open the official VB-CABLE download page. Wav
 
 The driver is not redistributed in Waveform. Its redistribution terms could not be verified from this cloud environment because the vendor site denied access. This guided flow and the optional NSIS step require validation on Windows; the cloud ZIP build does not install a driver.
 
-## Waveform 0.3.0
+## Waveform 0.3.1
 
-On Windows, run **Waveform Setup 0.3.0.exe** once, then double-click the Waveform desktop or Start-menu shortcut. Node.js is only needed for source development. Source users can also double-click **Start Waveform.cmd** after installing Node.js 24; it prepares and launches the source checkout.
+On Windows, run **Waveform Setup 0.3.1.exe** once, then double-click the Waveform desktop or Start-menu shortcut. Node.js is only needed for source development. Source users can also double-click **Start Waveform.cmd** after installing Node.js 24; it prepares and launches the source checkout.
 
 **Find new sounds / Search online** opens Myinstants search in an isolated in-app browser. It is a community soundboard site, accessed interactively rather than through an unofficial API. Choose **Download MP3** on a sound page to import it automatically. Quick searches include vine boom, bruh, metal pipe, air horn and fart. Online clips use only the first 15 seconds by default; choose 5, 10, 15 or 30 seconds. Website previews are muted at the selected limit. Source-page credits remain in the editor; rights vary by upload. Saved clips work offline. Search/download requires `www.myinstants.com` and `myinstants.com`.
 
-MP3 importing uses a bundled mpg123 WebAssembly decoder instead of depending on the system codec. Imports are converted to WAV and saved as owned bytes, avoiding persistent references to selected files. Local files are limited to 50 MB and the first 10 minutes; online downloads to 20 MB. Errors identify unreadable files, download pages, decoding or storage failures. Legacy saved clips are preserved. Bundled decoder licenses, source and rebuilding instructions are included under `resources/licenses` and `resources/third-party-sources` in the installed application.
+MP3 importing uses a bundled mpg123 WebAssembly decoder instead of depending on the system codec. Imports are converted to WAV and saved as owned bytes, avoiding persistent references to selected files. Local files are limited to 50 MB and the first 10 minutes; online downloads to 20 MB. Errors identify unreadable files, download pages, decoding or storage failures. The desktop app now saves audio and metadata as ordinary files in its profile’s `sound-library` folder. Readable legacy database clips are copied there without deleting the originals. If the old database cannot open, a message explains that existing files remain and new imports use desktop storage. Disk write failures report their cause. The running version appears at the bottom of the sidebar. Bundled decoder licenses, source and rebuilding instructions are included under `resources/licenses` and `resources/third-party-sources` in the installed application.
 
 **Voice studio** includes fan-inspired Hulk, Venom, Lash, Rem, TF2 Heavy/Pyro, and GLaDOS presets, editable microphone pitch (-12 to +12 semitones), bass/body, distortion, and synthetic texture. These effects process your own voice; they do not reproduce the actors or use trained character models. Clean preserves pitch; the gate can operate on any preset. Echo remains independently adjustable.
 
